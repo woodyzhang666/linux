@@ -50,6 +50,7 @@
 
 	aliases {
 		serial0 = &uart0;
+		eth0 = &emac;
 	};
 
 	chosen {
@@ -97,5 +98,9 @@
 
 &usbphy {
 	usb0_id_det-gpios = <&pio 5 6 GPIO_ACTIVE_HIGH>;
+	status = "okay";
+};
+
+&emac {
 	status = "okay";
 };
