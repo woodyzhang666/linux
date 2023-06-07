@@ -254,15 +254,6 @@ static void __init setup_bootmem(void)
 	 */
 	early_init_fdt_scan_reserved_mem();
 
-	/*
-	 * If DTB is built in, no need to reserve its memblock.
-	 * Otherwise, do reserve it but avoid using
-	 * early_init_fdt_reserve_self() since __pa() does
-	 * not work for DTB pointers that are fixmap addresses
-	 */
-	if (!IS_ENABLED(CONFIG_BUILTIN_DTB))
-		memblock_reserve(dtb_early_pa, fdt_totalsize(dtb_early_va));
-
 	dma_contiguous_reserve(dma32_phys_limit);
 	if (IS_ENABLED(CONFIG_64BIT))
 		hugetlb_cma_reserve(PUD_SHIFT - PAGE_SHIFT);
