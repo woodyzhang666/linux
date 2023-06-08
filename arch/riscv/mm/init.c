@@ -165,6 +165,8 @@ void __init mem_init(void)
 	swiotlb_init(max_pfn > PFN_DOWN(dma32_phys_limit), SWIOTLB_VERBOSE);
 	memblock_free_all();
 
+	pt_ops_set_buddy_lm();
+
 	print_vm_layout();
 }
 
@@ -328,7 +330,7 @@ static inline pte_t *__init get_pte_virt_late(phys_addr_t pa)
 	return (pte_t *) __va(pa);
 }
 
-static inline phys_addr_t __init alloc_pte_early(uintptr_t va)
+static inline phys_addr_t __init no_pgtable(uintptr_t va)
 {
 	/*
 	 * We only create PMD or PGD early mappings so we
@@ -337,7 +339,7 @@ static inline phys_addr_t __init alloc_pte_early(uintptr_t va)
 	BUG();
 }
 
-static inline phys_addr_t __init alloc_pte_fixmap(uintptr_t va)
+static inline phys_addr_t __init alloc_pte_memblock(uintptr_t va)
 {
 	return memblock_phys_alloc(PAGE_SIZE, PAGE_SIZE);
 }
@@ -420,7 +422,7 @@ static phys_addr_t __init alloc_pmd_early(uintptr_t va)
 	return (uintptr_t)early_pmd;
 }
 
-static phys_addr_t __init alloc_pmd_fixmap(uintptr_t va)
+static phys_addr_t __init alloc_pmd_memblock(uintptr_t va)
 {
 	return memblock_phys_alloc(PAGE_SIZE, PAGE_SIZE);
 }
@@ -486,7 +488,7 @@ static phys_addr_t __init alloc_pud_early(uintptr_t va)
 	return (uintptr_t)early_pud;
 }
 
-static phys_addr_t __init alloc_pud_fixmap(uintptr_t va)
+static phys_addr_t __init alloc_pud_memblock(uintptr_t va)
 {
 	return memblock_phys_alloc(PAGE_SIZE, PAGE_SIZE);
 }
@@ -524,7 +526,7 @@ static phys_addr_t __init alloc_p4d_early(uintptr_t va)
 	return (uintptr_t)early_p4d;
 }
 
-static phys_addr_t __init alloc_p4d_fixmap(uintptr_t va)
+static phys_addr_t __init alloc_p4d_memblock(uintptr_t va)
 {
 	return memblock_phys_alloc(PAGE_SIZE, PAGE_SIZE);
 }
@@ -948,9 +950,9 @@ static void __init create_fdt_early_page_table(uintptr_t fix_fdt_va,
  * MMU is not enabled, the page tables are allocated directly using
  * early_pmd/pud/p4d and the address returned is the physical one.
  */
-static void __init pt_ops_set_early(void)
+static void __init pt_ops_set_mmu_off(void)
 {
-	pt_ops.alloc_pte = alloc_pte_early;
+	pt_ops.alloc_pte = no_pgtable;
 	pt_ops.get_pte_virt = get_pte_virt_early;
 #ifndef __PAGETABLE_PMD_FOLDED
 	pt_ops.alloc_pmd = alloc_pmd_early;
@@ -962,6 +964,20 @@ static void __init pt_ops_set_early(void)
 #endif
 }
 
+static void __init pt_ops_set_noalloc_fixmap(void)
+{
+	pt_ops.alloc_pte = kernel_mapping_pa_to_va(no_pgtable);
+	pt_ops.get_pte_virt = kernel_mapping_pa_to_va(get_pte_virt_fixmap);
+#ifndef __PAGETABLE_PMD_FOLDED
+	pt_ops.alloc_pmd = kernel_mapping_pa_to_va(no_pgtable);
+	pt_ops.get_pmd_virt = kernel_mapping_pa_to_va(get_pmd_virt_fixmap);
+	pt_ops.alloc_pud = kernel_mapping_pa_to_va(no_pgtable);
+	pt_ops.get_pud_virt = kernel_mapping_pa_to_va(get_pud_virt_fixmap);
+	pt_ops.alloc_p4d = kernel_mapping_pa_to_va(no_pgtable);
+	pt_ops.get_p4d_virt = kernel_mapping_pa_to_va(get_p4d_virt_fixmap);
+#endif
+}
+
 /*
  * MMU is enabled but page table setup is not complete yet.
  * fixmap page table alloc functions must be used as a means to temporarily
@@ -970,17 +986,13 @@ static void __init pt_ops_set_early(void)
  * Note that this is called with MMU disabled, hence kernel_mapping_pa_to_va,
  * but it will be used as described above.
  */
-static void __init pt_ops_set_fixmap(void)
+static void __init pt_ops_set_memblock_fixmap(void)
 {
-	pt_ops.alloc_pte = kernel_mapping_pa_to_va(alloc_pte_fixmap);
-	pt_ops.get_pte_virt = kernel_mapping_pa_to_va(get_pte_virt_fixmap);
+	pt_ops.alloc_pte = alloc_pte_memblock;
 #ifndef __PAGETABLE_PMD_FOLDED
-	pt_ops.alloc_pmd = kernel_mapping_pa_to_va(alloc_pmd_fixmap);
-	pt_ops.get_pmd_virt = kernel_mapping_pa_to_va(get_pmd_virt_fixmap);
-	pt_ops.alloc_pud = kernel_mapping_pa_to_va(alloc_pud_fixmap);
-	pt_ops.get_pud_virt = kernel_mapping_pa_to_va(get_pud_virt_fixmap);
-	pt_ops.alloc_p4d = kernel_mapping_pa_to_va(alloc_p4d_fixmap);
-	pt_ops.get_p4d_virt = kernel_mapping_pa_to_va(get_p4d_virt_fixmap);
+	pt_ops.alloc_pmd = alloc_pmd_memblock;
+	pt_ops.alloc_pud = alloc_pud_memblock;
+	pt_ops.alloc_p4d = alloc_p4d_memblock;
 #endif
 }
 
@@ -988,20 +1000,25 @@ static void __init pt_ops_set_fixmap(void)
  * MMU is enabled and page table setup is complete, so from now, we can use
  * generic page allocation functions to setup page table.
  */
-static void __init pt_ops_set_late(void)
+static void __init pt_ops_set_memblock_lm(void)
 {
-	pt_ops.alloc_pte = alloc_pte_late;
 	pt_ops.get_pte_virt = get_pte_virt_late;
 #ifndef __PAGETABLE_PMD_FOLDED
-	pt_ops.alloc_pmd = alloc_pmd_late;
 	pt_ops.get_pmd_virt = get_pmd_virt_late;
-	pt_ops.alloc_pud = alloc_pud_late;
 	pt_ops.get_pud_virt = get_pud_virt_late;
-	pt_ops.alloc_p4d = alloc_p4d_late;
 	pt_ops.get_p4d_virt = get_p4d_virt_late;
 #endif
 }
 
+static void __init pt_ops_set_buddy_lm(void)
+{
+	pt_ops.alloc_pte = alloc_pte_late;
+#ifndef __PAGETABLE_PMD_FOLDED
+	pt_ops.alloc_pmd = alloc_pmd_late;
+	pt_ops.alloc_pud = alloc_pud_late;
+	pt_ops.alloc_p4d = alloc_p4d_late;
+#endif
+}
 asmlinkage void __init setup_vm(uintptr_t dtb_pa)
 {
 	pmd_t __maybe_unused fix_bmap_spmd, fix_bmap_epmd;
@@ -1075,7 +1092,7 @@ asmlinkage void __init setup_vm(uintptr_t dtb_pa)
 #endif
 
 	apply_early_boot_alternatives();
-	pt_ops_set_early();
+	pt_ops_set_mmu_off();
 
 	/* Setup early PGD for fixmap */
 	create_pgd_mapping(early_pg_dir, FIXADDR_START,
@@ -1154,7 +1171,7 @@ asmlinkage void __init setup_vm(uintptr_t dtb_pa)
 	}
 #endif
 
-	pt_ops_set_fixmap();
+	pt_ops_set_noalloc_fixmap();
 }
 
 static void __init create_linear_mapping_range(phys_addr_t start,
@@ -1249,7 +1266,7 @@ static void __init setup_vm_final(void)
 	csr_write(CSR_SATP, PFN_DOWN(__pa_symbol(swapper_pg_dir)) | satp_mode);
 	local_flush_tlb_all();
 
-	pt_ops_set_late();
+	pt_ops_set_memblock_lm();
 }
 #else
 asmlinkage void __init setup_vm(uintptr_t dtb_pa)
@@ -1334,6 +1351,7 @@ static void __init reserve_crashkernel(void)
 void __init paging_init(void)
 {
 	setup_bootmem();
+	pt_ops_set_memblock_fixmap();
 	setup_vm_final();
 }
 
