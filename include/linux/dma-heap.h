@@ -12,7 +12,24 @@
 #include <linux/cdev.h>
 #include <linux/types.h>
 
-struct dma_heap;
+/**
+ * struct dma_heap - represents a dmabuf heap in the system
+ * @name:		used for debugging/device-node name
+ * @ops:		ops struct for this heap
+ * @heap_devt		heap device node
+ * @list		list head connecting to list of heaps
+ * @heap_cdev		heap char device
+ *
+ * Represents a heap of memory from which buffers can be made.
+ */
+struct dma_heap {
+	const char *name;
+	const struct dma_heap_ops *ops;
+	void *priv;
+	dev_t heap_devt;
+	struct list_head list;
+	struct cdev heap_cdev;
+};
 
 /**
  * struct dma_heap_ops - ops to operate on a given heap
@@ -48,7 +65,10 @@ struct dma_heap_export_info {
  * Returns:
  * The per-heap data for the heap.
  */
-void *dma_heap_get_drvdata(struct dma_heap *heap);
+static inline void *dma_heap_get_drvdata(struct dma_heap *heap)
+{
+	return heap->priv;
+}
 
 /**
  * dma_heap_get_name() - get heap name
@@ -57,7 +77,10 @@ void *dma_heap_get_drvdata(struct dma_heap *heap);
  * Returns:
  * The char* for the heap name.
  */
-const char *dma_heap_get_name(struct dma_heap *heap);
+static inline const char *dma_heap_get_name(struct dma_heap *heap)
+{
+	return heap->name;
+}
 
 /**
  * dma_heap_add - adds a heap to dmabuf heaps

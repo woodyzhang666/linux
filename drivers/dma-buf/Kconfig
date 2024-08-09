@@ -67,7 +67,7 @@ config DMABUF_SELFTESTS
 	depends on DMA_SHARED_BUFFER
 
 menuconfig DMABUF_HEAPS
-	bool "DMA-BUF Userland Memory Heaps"
+	tristate "DMA-BUF Userland Memory Heaps"
 	select DMA_SHARED_BUFFER
 	help
 	  Choose this option to enable the DMA-BUF userland memory heaps.

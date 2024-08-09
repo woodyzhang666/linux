@@ -24,25 +24,6 @@
 
 #define NUM_HEAP_MINORS 128
 
-/**
- * struct dma_heap - represents a dmabuf heap in the system
- * @name:		used for debugging/device-node name
- * @ops:		ops struct for this heap
- * @heap_devt		heap device node
- * @list		list head connecting to list of heaps
- * @heap_cdev		heap char device
- *
- * Represents a heap of memory from which buffers can be made.
- */
-struct dma_heap {
-	const char *name;
-	const struct dma_heap_ops *ops;
-	void *priv;
-	dev_t heap_devt;
-	struct list_head list;
-	struct cdev heap_cdev;
-};
-
 static LIST_HEAD(heap_list);
 static DEFINE_MUTEX(heap_list_lock);
 static dev_t dma_heap_devt;
@@ -192,30 +173,6 @@ static const struct file_operations dma_heap_fops = {
 #endif
 };
 
-/**
- * dma_heap_get_drvdata() - get per-subdriver data for the heap
- * @heap: DMA-Heap to retrieve private data for
- *
- * Returns:
- * The per-subdriver data for the heap.
- */
-void *dma_heap_get_drvdata(struct dma_heap *heap)
-{
-	return heap->priv;
-}
-
-/**
- * dma_heap_get_name() - get heap name
- * @heap: DMA-Heap to retrieve private data for
- *
- * Returns:
- * The char* for the heap name.
- */
-const char *dma_heap_get_name(struct dma_heap *heap)
-{
-	return heap->name;
-}
-
 struct dma_heap *dma_heap_add(const struct dma_heap_export_info *exp_info)
 {
 	struct dma_heap *heap, *h, *err_ret;
@@ -300,6 +257,7 @@ err0:
 	kfree(heap);
 	return err_ret;
 }
+EXPORT_SYMBOL_GPL(dma_heap_add);
 
 static char *dma_heap_devnode(const struct device *dev, umode_t *mode)
 {
@@ -324,3 +282,7 @@ static int dma_heap_init(void)
 	return 0;
 }
 subsys_initcall(dma_heap_init);
+
+MODULE_DESCRIPTION("DMA Heap");
+MODULE_IMPORT_NS(DMA_BUF);
+MODULE_LICENSE("GPL");
