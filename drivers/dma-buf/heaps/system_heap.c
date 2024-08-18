@@ -436,3 +436,7 @@ static int system_heap_create(void)
 	return 0;
 }
 module_init(system_heap_create);
+
+MODULE_DESCRIPTION("DMA Heap");
+MODULE_IMPORT_NS(DMA_BUF);
+MODULE_LICENSE("GPL");
