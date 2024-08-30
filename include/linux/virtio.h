@@ -134,6 +134,8 @@ struct virtio_device {
 	bool failed;
 	bool config_enabled;
 	bool config_change_pending;
+	bool need_reset;
+	struct work_struct reset_work;
 	spinlock_t config_lock;
 	spinlock_t vqs_list_lock;
 	struct device dev;

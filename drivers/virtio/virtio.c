@@ -123,9 +123,29 @@ void virtio_check_driver_offered_feature(const struct virtio_device *vdev,
 }
 EXPORT_SYMBOL_GPL(virtio_check_driver_offered_feature);
 
+static void reset_work_func(struct work_struct *work)
+{
+	int ret;
+	struct virtio_device *vdev;
+
+	vdev = container_of(work, struct virtio_device, reset_work);
+	vdev->need_reset = false;
+	ret = device_reprobe(&vdev->dev);
+	if (ret)
+		dev_err(&vdev->dev, "Reprobe error %d\n", ret);
+}
+
 static void __virtio_config_changed(struct virtio_device *dev)
 {
 	struct virtio_driver *drv = drv_to_virtio(dev->dev.driver);
+
+	if (dev->config->get_status(dev) & VIRTIO_CONFIG_S_NEEDS_RESET) {
+		if (!dev->need_reset) {
+			dev->need_reset = true;
+			queue_work(system_unbound_wq, &dev->reset_work);
+		}
+		return;
+	}
 
 	if (!dev->config_enabled)
 		dev->config_change_pending = true;
@@ -457,6 +477,8 @@ int register_virtio_device(struct virtio_device *dev)
 	spin_lock_init(&dev->config_lock);
 	dev->config_enabled = false;
 	dev->config_change_pending = false;
+	dev->need_reset = false;
+	INIT_WORK(&dev->reset_work, reset_work_func);
 
 	INIT_LIST_HEAD(&dev->vqs);
 	spin_lock_init(&dev->vqs_list_lock);
